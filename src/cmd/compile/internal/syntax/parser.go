@@ -94,6 +94,12 @@ func (p *parser) want(tok token) {
 	}
 }
 
+func (p *parser) trySkipNewline() {
+	if p.tok == _Semi && p.lit == "newline" {
+		p.next()
+	}
+}
+
 // ----------------------------------------------------------------------------
 // Error handling
 
@@ -303,12 +309,16 @@ func (p *parser) fileOrNil() *File {
 
 		// Reset p.pragma BEFORE advancing to the next token (consuming ';')
 		// since comments before may set pragmas for the next function decl.
-		p.pragma = 0
+		//p.pragma = 0
 
+		p.got(_Semi)
+
+		/*
 		if p.tok != _EOF && !p.got(_Semi) {
 			p.syntax_error("after top level declaration")
 			p.advance(_Const, _Type, _Var, _Func)
 		}
+		*/
 	}
 	// p.tok == _EOF
 
@@ -409,6 +419,9 @@ func (p *parser) typeDecl(group *Group) Decl {
 	d := new(TypeDecl)
 	d.pos = p.pos()
 
+	d.Pragma = p.pragma
+	p.pragma = 0
+
 	d.Name = p.name()
 	d.Alias = p.got(_Assign)
 	d.Type = p.typeOrNil()
@@ -418,7 +431,6 @@ func (p *parser) typeDecl(group *Group) Decl {
 		p.advance(_Semi, _Rparen)
 	}
 	d.Group = group
-	d.Pragma = p.pragma
 
 	return d
 }
@@ -492,16 +504,20 @@ func (p *parser) funcDeclOrNil() *FuncDecl {
 	// 	}
 	// }
 
+	f.Pragma = p.pragma
+	p.pragma = 0
+
 	f.Name = p.name()
 	f.Type = p.funcType()
+
+	p.trySkipNewline()
+
 	if p.tok == _Lbrace {
 		f.Body = p.blockStmt("")
 		if p.mode&CheckBranches != 0 {
 			checkBranches(f.Body, p.errh)
 		}
 	}
-
-	f.Pragma = p.pragma
 
 	// TODO(gri) deal with function properties
 	// if noescape && body != nil {
@@ -720,6 +736,9 @@ func (p *parser) operand(keep_parens bool) Expr {
 		pos := p.pos()
 		p.next()
 		t := p.funcType()
+		
+		p.trySkipNewline()
+
 		if p.tok == _Lbrace {
 			p.xnest++
 
@@ -774,6 +793,11 @@ func (p *parser) pexpr(keep_parens bool) Expr {
 	}
 
 	x := p.operand(keep_parens)
+
+	switch x.(type) {
+	case *ArrayType, *SliceType, *StructType, *MapType:
+		p.trySkipNewline()
+	}
 
 loop:
 	for {
@@ -1666,6 +1690,12 @@ func (p *parser) labeledStmtOrNil(label *Name) Stmt {
 }
 
 func (p *parser) blockStmt(context string) *BlockStmt {
+	p.trySkipNewline()
+
+	if !p.got(_Lbrace) {
+		return p.singleStmt()
+	}
+
 	if trace {
 		defer p.trace("blockStmt")()
 	}
@@ -1673,15 +1703,27 @@ func (p *parser) blockStmt(context string) *BlockStmt {
 	s := new(BlockStmt)
 	s.pos = p.pos()
 
-	if !p.got(_Lbrace) {
-		p.syntax_error("expecting { after " + context)
-		p.advance(_Name, _Rbrace)
-		// TODO(gri) may be better to return here than to continue (#19663)
-	}
-
 	s.List = p.stmtList()
 	s.Rbrace = p.pos()
 	p.want(_Rbrace)
+
+	return s
+}
+
+func (p *parser) singleStmt() *BlockStmt {
+	if trace {
+		defer p.trace("blockStmt")()
+	}
+
+	s := new(BlockStmt)
+	s.pos = p.pos()
+
+	stm := p.stmtOrNil()
+	s.List = append(s.List, stm)
+
+	s.Rbrace = p.pos()
+
+	p.got(_Semi)
 
 	return s
 }
@@ -1731,11 +1773,19 @@ func (p *parser) header(keyword token) (init SimpleStmt, cond Expr, post SimpleS
 	outer := p.xnest
 	p.xnest = -1
 
+	var hasLparen bool = false
+
 	if p.tok != _Semi {
 		// accept potential varDecl but complain
 		if p.got(_Var) {
 			p.syntax_error(fmt.Sprintf("var declaration not allowed in %s initializer", keyword.String()))
 		}
+
+		if keyword == _For && p.tok == _Lparen && p.lit == "for_loop" {
+			p.next()
+			hasLparen = true
+		}
+
 		init = p.simpleStmt(nil, keyword == _For)
 		// If we have a range clause, we are done (can only happen for keyword == _For).
 		if _, ok := init.(*RangeClause); ok {
@@ -1743,6 +1793,8 @@ func (p *parser) header(keyword token) (init SimpleStmt, cond Expr, post SimpleS
 			return
 		}
 	}
+
+	p.trySkipNewline()
 
 	var condStmt SimpleStmt
 	var semi struct {
@@ -1776,6 +1828,16 @@ func (p *parser) header(keyword token) (init SimpleStmt, cond Expr, post SimpleS
 		init = nil
 	}
 
+	if keyword == _For && hasLparen {
+		if p.tok == _Rparen {
+			p.next()
+		} else {
+			p.syntax_error("expecting ) after for loop condition")
+		}
+	}
+
+	p.trySkipNewline()
+
 done:
 	// unpack condStmt
 	switch s := condStmt.(type) {
@@ -1808,6 +1870,8 @@ func (p *parser) ifStmt() *IfStmt {
 	s.Init, s.Cond, _ = p.header(_If)
 	s.Then = p.blockStmt("if clause")
 
+	p.trySkipNewline()
+
 	if p.got(_Else) {
 		switch p.tok {
 		case _If:
@@ -1815,8 +1879,7 @@ func (p *parser) ifStmt() *IfStmt {
 		case _Lbrace:
 			s.Else = p.blockStmt("")
 		default:
-			p.syntax_error("else must be followed by if or statement block")
-			p.advance(_Name, _Rbrace)
+			s.Else = p.singleStmt()
 		}
 	}
 
@@ -2055,10 +2118,15 @@ func (p *parser) stmtList() (l []Stmt) {
 		if p.tok == _Rparen || p.tok == _Rbrace {
 			continue
 		}
+
+		p.got(_Semi)
+
+		/*
 		if !p.got(_Semi) {
 			p.syntax_error("at end of statement")
 			p.advance(_Semi, _Rbrace)
 		}
+		*/
 	}
 	return
 }
