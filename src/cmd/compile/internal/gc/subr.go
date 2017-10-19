@@ -288,7 +288,7 @@ func importdot(opkg *types.Pkg, pack *Node) {
 
 	if n == 0 {
 		// can't possibly be used - there were no symbols
-		yyerrorl(pack.Pos, "imported and not used: %q", opkg.Path)
+		Warnl(pack.Pos, "imported and not used: %q", opkg.Path)
 	}
 }
 

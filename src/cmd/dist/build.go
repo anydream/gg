@@ -487,6 +487,7 @@ var deptab = []struct {
 var depsuffix = []string{
 	".s",
 	".go",
+	".gg",
 }
 
 // gentab records how to generate some trivial files.

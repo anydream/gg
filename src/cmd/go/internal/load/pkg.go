@@ -582,7 +582,7 @@ func VendoredImportPath(parent *Package, path string) (found string) {
 func hasGoFiles(dir string) bool {
 	fis, _ := ioutil.ReadDir(dir)
 	for _, fi := range fis {
-		if !fi.IsDir() && strings.HasSuffix(fi.Name(), ".go") {
+		if !fi.IsDir() && (strings.HasSuffix(fi.Name(), ".go") || strings.HasSuffix(fi.Name(), ".gg")) {
 			return true
 		}
 	}
@@ -1801,7 +1801,7 @@ func Packages(args []string) []*Package {
 // cannot be loaded at all.
 // The packages that fail to load will have p.Error != nil.
 func PackagesAndErrors(args []string) []*Package {
-	if len(args) > 0 && strings.HasSuffix(args[0], ".go") {
+	if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".gg")) {
 		return []*Package{GoFilesPackage(args)}
 	}
 
@@ -1878,7 +1878,7 @@ func PackagesForBuild(args []string) []*Package {
 func GoFilesPackage(gofiles []string) *Package {
 	// TODO: Remove this restriction.
 	for _, f := range gofiles {
-		if !strings.HasSuffix(f, ".go") {
+		if !(strings.HasSuffix(f, ".go") || strings.HasSuffix(f, ".gg")) {
 			base.Fatalf("named files must be .go files")
 		}
 	}
