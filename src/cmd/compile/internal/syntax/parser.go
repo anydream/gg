@@ -314,10 +314,10 @@ func (p *parser) fileOrNil() *File {
 		p.got(_Semi)
 
 		/*
-		if p.tok != _EOF && !p.got(_Semi) {
-			p.syntax_error("after top level declaration")
-			p.advance(_Const, _Type, _Var, _Func)
-		}
+			if p.tok != _EOF && !p.got(_Semi) {
+				p.syntax_error("after top level declaration")
+				p.advance(_Const, _Type, _Var, _Func)
+			}
 		*/
 	}
 	// p.tok == _EOF
@@ -736,7 +736,7 @@ func (p *parser) operand(keep_parens bool) Expr {
 		pos := p.pos()
 		p.next()
 		t := p.funcType()
-		
+
 		p.trySkipNewline()
 
 		if p.tok == _Lbrace {
@@ -2122,10 +2122,10 @@ func (p *parser) stmtList() (l []Stmt) {
 		p.got(_Semi)
 
 		/*
-		if !p.got(_Semi) {
-			p.syntax_error("at end of statement")
-			p.advance(_Semi, _Rbrace)
-		}
+			if !p.got(_Semi) {
+				p.syntax_error("at end of statement")
+				p.advance(_Semi, _Rbrace)
+			}
 		*/
 	}
 	return
@@ -2268,6 +2268,13 @@ func (p *parser) ocomma(follow token) bool {
 		p.next()
 		return true
 
+	case _Rparen, _Rbrace:
+		// comma is optional before ) or }
+		return true
+	}
+
+	p.trySkipNewline()
+	switch p.tok {
 	case _Rparen, _Rbrace:
 		// comma is optional before ) or }
 		return true
