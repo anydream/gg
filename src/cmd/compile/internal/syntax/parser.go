@@ -1796,6 +1796,15 @@ func (p *parser) header(keyword token) (init SimpleStmt, cond Expr, post SimpleS
 		// If we have a range clause, we are done (can only happen for keyword == _For).
 		if _, ok := init.(*RangeClause); ok {
 			p.xnest = outer
+
+			if keyword == _For && hasLparen {
+				if p.tok == _Rparen {
+					p.next()
+				} else {
+					p.syntax_error("expecting ) after for loop condition")
+				}
+			}
+
 			return
 		}
 	}
