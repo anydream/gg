@@ -1790,6 +1790,7 @@ func (p *parser) header(keyword token) (init SimpleStmt, cond Expr, post SimpleS
 		if keyword == _For && p.tok == _Lparen && p.lit == "for_loop" {
 			p.next()
 			hasLparen = true
+			p.xnest = 0
 		}
 
 		init = p.simpleStmt(nil, keyword == _For)
