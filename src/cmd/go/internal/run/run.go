@@ -58,7 +58,7 @@ func runRun(cmd *base.Command, args []string) {
 	b.Init()
 	b.Print = printStderr
 	i := 0
-	for i < len(args) && strings.HasSuffix(args[i], ".go") {
+	for i < len(args) && (strings.HasSuffix(args[i], ".go") || strings.HasSuffix(args[i], ".gg")) {
 		i++
 	}
 	files, cmdArgs := args[:i], args[i:]
